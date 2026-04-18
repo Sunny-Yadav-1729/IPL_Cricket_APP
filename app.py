@@ -183,6 +183,32 @@ def load_squad_data() -> dict:
     with open(path, "r") as f:
         return json.load(f)
 
+def get_teams_playing_recently():
+    path = "teams_playing_11_players.json"
+    if not os.path.exists(path):
+        return {}
+    with open(path, "r") as f:
+        return json.load(f)
+    
+def update_teams_playing_recently(team1, team2, selected_players1, selected_players2):
+    path = "teams_playing_11_players.json"
+    if team_playing11_recently.get(str(team1)) != []:
+       team_playing11_recently[str(team1)] = selected_players1
+    if team_playing11_recently.get(str(team2)) != []:
+        team_playing11_recently[str(team2)] = selected_players2
+
+    
+
+    if os.path.exists(path):
+        with open(path, "r") as f:
+            old_data = json.load(f)
+    else:
+        old_data = {}
+
+    if old_data != team_playing11_recently:
+        with open(path, "w") as f:
+            json.dump(team_playing11_recently, f)
+
 def get_player_image(player):
     def get_base64_image(path):
             try : 
@@ -199,7 +225,7 @@ stat_data  = load_stat_data()
 squad_data = load_squad_data()
 playerNames = load_player_names()
 PN_L_to_S = {playerNames[i]:i for i in playerNames}
-
+team_playing11_recently = get_teams_playing_recently()
 stat_data  = load_stat_data()
 squad_data = load_squad_data()
 playerNames = load_player_names()
@@ -1044,131 +1070,137 @@ elif page == "👤  Prediction Match Wins":
     st.markdown("**Select Playing XI for each team:**")
     col1, col2 = st.columns(2)
     with col1:
-        selected_players1 = st.multiselect(f"🔴 Select players for {team1}", list(squad1.keys()), default=[], key="sel_p1", max_selections=11)
+        selected_players1 = st.multiselect(f"🔴 Select players for {team1}", list(squad1.keys()), default=team_playing11_recently.get(team1, []), key="sel_p1", max_selections=11)
     with col2:
-        selected_players2 = st.multiselect(f"🔵 Select players for {team2}", list(squad2.keys()), default=[], key="sel_p2", max_selections=11)
+        selected_players2 = st.multiselect(f"🔵 Select players for {team2}", list(squad2.keys()), default=team_playing11_recently.get(team2, []), key="sel_p2", max_selections=11)
 
     # Filter squads to selected players
     if  len(selected_players1) < 11 or len(selected_players2) < 11:
-        st.error(f"Please select at most 11 players for {team1} and {team2}.")
-        st.stop()
-    selected_squad1 = {p: squad1[p] for p in selected_players1 if p in squad1}
-    selected_squad2 = {p: squad2[p] for p in selected_players2 if p in squad2}
-
-   
-
-    if not selected_squad1 or not selected_squad2:
         st.error(f"Please select players for both teams.")
         st.stop()
+    
 
-    p1, p2, s1, s2 = win_probability(selected_squad1, selected_squad2, team1, team2)
+  
+    if st.button("Predict Match Outcome", key="predict_button"):
+        selected_squad1 = {p: squad1[p] for p in selected_players1 if p in squad1}
+        selected_squad2 = {p: squad2[p] for p in selected_players2 if p in squad2}
 
-    # ── Win-probability display ──
-    st.markdown(f"""
-    <div style="display:flex;align-items:center;justify-content:space-around;
-                background:linear-gradient(135deg,#111827,#1E2A3B);
-                border-radius:20px;padding:30px;border:1px solid #1F2937;margin-bottom:24px">
-        <div style="text-align:center">
-            <div style="font-family:'Bebas Neue';font-size:3rem;color:#F97316">{team1}</div>
-            <div style="font-family:'Bebas Neue';font-size:4rem;color:#FBBF24">{p1}%</div>
-            <div style="color:#64748B;font-size:.8rem;letter-spacing:2px">WIN PROBABILITY</div>
+
+       
+
+        if selected_squad1 and  selected_squad2:
+            update_teams_playing_recently(team1, team2, selected_players1, selected_players2)
+
+            
+
+        p1, p2, s1, s2 = win_probability(selected_squad1, selected_squad2, team1, team2)
+
+        # ── Win-probability display ──
+        st.markdown(f"""
+        <div style="display:flex;align-items:center;justify-content:space-around;
+                    background:linear-gradient(135deg,#111827,#1E2A3B);
+                    border-radius:20px;padding:30px;border:1px solid #1F2937;margin-bottom:24px">
+            <div style="text-align:center">
+                <div style="font-family:'Bebas Neue';font-size:3rem;color:#F97316">{team1}</div>
+                <div style="font-family:'Bebas Neue';font-size:4rem;color:#FBBF24">{p1}%</div>
+                <div style="color:#64748B;font-size:.8rem;letter-spacing:2px">WIN PROBABILITY</div>
+            </div>
+            <div style="font-family:'Bebas Neue';font-size:2rem;color:#374151">VS</div>
+            <div style="text-align:center">
+                <div style="font-family:'Bebas Neue';font-size:3rem;color:#60A5FA">{team2}</div>
+                <div style="font-family:'Bebas Neue';font-size:4rem;color:#FBBF24">{p2}%</div>
+                <div style="color:#64748B;font-size:.8rem;letter-spacing:2px">WIN PROBABILITY</div>
+            </div>
         </div>
-        <div style="font-family:'Bebas Neue';font-size:2rem;color:#374151">VS</div>
-        <div style="text-align:center">
-            <div style="font-family:'Bebas Neue';font-size:3rem;color:#60A5FA">{team2}</div>
-            <div style="font-family:'Bebas Neue';font-size:4rem;color:#FBBF24">{p2}%</div>
-            <div style="color:#64748B;font-size:.8rem;letter-spacing:2px">WIN PROBABILITY</div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
 
-    # Probability bar
-    fig_prob = go.Figure(go.Bar(
-        x=[p1, p2], y=[team1, team2],
-        orientation='h',
-        marker_color=["#F97316", "#60A5FA"],
-        text=[f"{p1}%", f"{p2}%"], textposition='inside',
-    ))
-    dark_fig_layout(fig_prob, title=f"{team1} vs {team2} — Win Probability ({season})", height=220)
-    fig_prob.update_layout(xaxis=dict(range=[0, 100], gridcolor="#1F2937"))
-    st.plotly_chart(fig_prob, use_container_width=True)
-
-    st.divider()
-
-    # ── Player-level predictions ──
-    st.markdown("**🔍 Player Contribution Scores (vs Opponent)**")
-    tab_t1, tab_t2 = st.tabs([f"🔴 {team1}", f"🔵 {team2}"])
-
-    def player_contribution_df(squad, opp):
-        rows = []
-        for p, info in squad.items():
-            pred = predict_performance(p, opp)
-            role = ROLE_MAP.get(info.get("role", "Batter"), classify_role(p))
-            rows.append({
-                "Player":     playerNames.get(p, p),
-                "Role":       role,
-                "Pred Runs":  pred["runs"],
-                "Pred SR":    pred["sr"],
-                "Pred Wkts":  pred["wickets"],
-                "Pred Econ":  pred["economy"],
-            })
-        return pd.DataFrame(rows).sort_values("Pred Runs", ascending=False)
-
-    with tab_t1:
-        df1 = player_contribution_df(selected_squad1, team2)
-        fig1 = go.Figure(go.Bar(
-            x=df1["Player"], y=df1["Pred Runs"],
-            marker_color="#F97316", text=df1["Pred Runs"].astype(str), textposition='outside',
+        # Probability bar
+        fig_prob = go.Figure(go.Bar(
+            x=[p1, p2], y=[team1, team2],
+            orientation='h',
+            marker_color=["#F97316", "#60A5FA"],
+            text=[f"{p1}%", f"{p2}%"], textposition='inside',
         ))
-        dark_fig_layout(fig1, title=f"{team1} — Predicted Runs vs {team2}", height=300)
-        fig1.update_layout(xaxis=dict(tickangle=-35, gridcolor="#1F2937"))
-        st.plotly_chart(fig1, use_container_width=True)
-        st.dataframe(df1, use_container_width=True, hide_index=True)
+        dark_fig_layout(fig_prob, title=f"{team1} vs {team2} — Win Probability ({season})", height=220)
+        fig_prob.update_layout(xaxis=dict(range=[0, 100], gridcolor="#1F2937"))
+        st.plotly_chart(fig_prob, use_container_width=True)
 
-    with tab_t2:
-        df2 = player_contribution_df(selected_squad2, team1)
-        fig2 = go.Figure(go.Bar(
-            x=df2["Player"], y=df2["Pred Runs"],
-            marker_color="#60A5FA", text=df2["Pred Runs"].astype(str), textposition='outside',
-        ))
-        dark_fig_layout(fig2, title=f"{team2} — Predicted Runs vs {team1}", height=300)
-        fig2.update_layout(xaxis=dict(tickangle=-35, gridcolor="#1F2937"))
-        st.plotly_chart(fig2, use_container_width=True)
-        st.dataframe(df2, use_container_width=True, hide_index=True)
+        st.divider()
 
-    # ── Team radar ──
-    st.divider()
-    st.markdown("**🕸️ Team Strength Radar**")
-    def team_radar_vals(squad, opp):
-        preds = [predict_performance(p, opp) for p in squad]
-        if not preds: return [0]*5
-        avg_runs  = np.mean([x["runs"] for x in preds])
-        avg_sr    = np.mean([x["sr"]   for x in preds])
-        tot_wkts  = sum(x["wickets"] for x in preds)
-        avg_econ  = np.mean([x["economy"] for x in preds if x["economy"] > 0]) if any(x["economy"] > 0 for x in preds) else 10
-        depth     = sum(1 for x in preds if x["runs"] >= 20)
-        return [avg_runs, avg_sr, tot_wkts, max(0, 10 - avg_econ), depth]
+        # ── Player-level predictions ──
+        st.markdown("**🔍 Player Contribution Scores (vs Opponent)**")
+        tab_t1, tab_t2 = st.tabs([f"🔴 {team1}", f"🔵 {team2}"])
 
-    rv1 = team_radar_vals(squad1, team2)
-    rv2 = team_radar_vals(squad2, team1)
-    mx  = [max(a, b, 0.01) for a, b in zip(rv1, rv2)]
-    rv1n = [min(v/m*100, 100) for v, m in zip(rv1, mx)]
-    rv2n = [min(v/m*100, 100) for v, m in zip(rv2, mx)]
-    cats = ["Avg Runs", "Avg SR", "Total Wkts", "Econ (inv)", "Depth (20+)"]
+        def player_contribution_df(squad, opp):
+            rows = []
+            for p, info in squad.items():
+                pred = predict_performance(p, opp)
+                role = ROLE_MAP.get(info.get("role", "Batter"), classify_role(p))
+                rows.append({
+                    "Player":     playerNames.get(p, p),
+                    "Role":       role,
+                    "Pred Runs":  pred["runs"],
+                    "Pred SR":    pred["sr"],
+                    "Pred Wkts":  pred["wickets"],
+                    "Pred Econ":  pred["economy"],
+                })
+            return pd.DataFrame(rows).sort_values("Pred Runs", ascending=False)
 
-    fig_rad = go.Figure()
-    fig_rad.add_trace(go.Scatterpolar(r=rv1n + [rv1n[0]], theta=cats + [cats[0]],
-        fill='toself', name=team1, line_color='#F97316', fillcolor='rgba(249,115,22,.2)'))
-    fig_rad.add_trace(go.Scatterpolar(r=rv2n + [rv2n[0]], theta=cats + [cats[0]],
-        fill='toself', name=team2, line_color='#60A5FA', fillcolor='rgba(96,165,250,.15)'))
-    fig_rad.update_layout(
-        polar=dict(radialaxis=dict(range=[0, 100], gridcolor='#1F2937', color='#64748B'),
-                   angularaxis=dict(gridcolor='#1F2937', color='#64748B'),
-                   bgcolor='rgba(0,0,0,0)'),
-        paper_bgcolor='rgba(0,0,0,0)', font_color='#CBD5E1',
-        legend=dict(bgcolor='rgba(0,0,0,0)'), height=400,
-    )
-    st.plotly_chart(fig_rad, use_container_width=True)
+        with tab_t1:
+            df1 = player_contribution_df(selected_squad1, team2)
+            fig1 = go.Figure(go.Bar(
+                x=df1["Player"], y=df1["Pred Runs"],
+                marker_color="#F97316", text=df1["Pred Runs"].astype(str), textposition='outside',
+            ))
+            dark_fig_layout(fig1, title=f"{team1} — Predicted Runs vs {team2}", height=300)
+            fig1.update_layout(xaxis=dict(tickangle=-35, gridcolor="#1F2937"))
+            st.plotly_chart(fig1, use_container_width=True)
+            st.dataframe(df1, use_container_width=True, hide_index=True)
+
+        with tab_t2:
+            df2 = player_contribution_df(selected_squad2, team1)
+            fig2 = go.Figure(go.Bar(
+                x=df2["Player"], y=df2["Pred Runs"],
+                marker_color="#60A5FA", text=df2["Pred Runs"].astype(str), textposition='outside',
+            ))
+            dark_fig_layout(fig2, title=f"{team2} — Predicted Runs vs {team1}", height=300)
+            fig2.update_layout(xaxis=dict(tickangle=-35, gridcolor="#1F2937"))
+            st.plotly_chart(fig2, use_container_width=True)
+            st.dataframe(df2, use_container_width=True, hide_index=True)
+
+        # ── Team radar ──
+        st.divider()
+        st.markdown("**🕸️ Team Strength Radar**")
+        def team_radar_vals(squad, opp):
+            preds = [predict_performance(p, opp) for p in squad]
+            if not preds: return [0]*5
+            avg_runs  = np.mean([x["runs"] for x in preds])
+            avg_sr    = np.mean([x["sr"]   for x in preds])
+            tot_wkts  = sum(x["wickets"] for x in preds)
+            avg_econ  = np.mean([x["economy"] for x in preds if x["economy"] > 0]) if any(x["economy"] > 0 for x in preds) else 10
+            depth     = sum(1 for x in preds if x["runs"] >= 20)
+            return [avg_runs, avg_sr, tot_wkts, max(0, 10 - avg_econ), depth]
+
+        rv1 = team_radar_vals(squad1, team2)
+        rv2 = team_radar_vals(squad2, team1)
+        mx  = [max(a, b, 0.01) for a, b in zip(rv1, rv2)]
+        rv1n = [min(v/m*100, 100) for v, m in zip(rv1, mx)]
+        rv2n = [min(v/m*100, 100) for v, m in zip(rv2, mx)]
+        cats = ["Avg Runs", "Avg SR", "Total Wkts", "Econ (inv)", "Depth (20+)"]
+
+        fig_rad = go.Figure()
+        fig_rad.add_trace(go.Scatterpolar(r=rv1n + [rv1n[0]], theta=cats + [cats[0]],
+            fill='toself', name=team1, line_color='#F97316', fillcolor='rgba(249,115,22,.2)'))
+        fig_rad.add_trace(go.Scatterpolar(r=rv2n + [rv2n[0]], theta=cats + [cats[0]],
+            fill='toself', name=team2, line_color='#60A5FA', fillcolor='rgba(96,165,250,.15)'))
+        fig_rad.update_layout(
+            polar=dict(radialaxis=dict(range=[0, 100], gridcolor='#1F2937', color='#64748B'),
+                    angularaxis=dict(gridcolor='#1F2937', color='#64748B'),
+                    bgcolor='rgba(0,0,0,0)'),
+            paper_bgcolor='rgba(0,0,0,0)', font_color='#CBD5E1',
+            legend=dict(bgcolor='rgba(0,0,0,0)'), height=400,
+        )
+        st.plotly_chart(fig_rad, use_container_width=True)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
