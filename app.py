@@ -189,7 +189,7 @@ def get_player_image(player):
                 with open(path, "rb") as img_file:
                     return base64.b64encode(img_file.read()).decode()
             except Exception as e:
-                default_path = r'ipl_player_images\Aakash Chopra.png'
+                default_path = os.path.join("ipl_player_images", "Aakash Chopra.png")
                 with open(default_path, "rb") as img_file:
                     return base64.b64encode(img_file.read()).decode()
 
@@ -199,7 +199,6 @@ stat_data  = load_stat_data()
 squad_data = load_squad_data()
 playerNames = load_player_names()
 PN_L_to_S = {playerNames[i]:i for i in playerNames}
-default_image = r'C:\\Users\\WELCOME\\Desktop\\Cricket_\\PlayerPerformancePrediction_Main_folder\\ipl_player_images\\ipl_player_images\\Anshul Kamboj.png'
 
 stat_data  = load_stat_data()
 squad_data = load_squad_data()
