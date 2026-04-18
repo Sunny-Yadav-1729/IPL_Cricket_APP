@@ -6,7 +6,9 @@ Requires:
 Run:  streamlit run app.py
 """
 
+import base64
 from itertools import count
+from tkinter import Image
 
 import streamlit as st
 import json, os, copy, math
@@ -195,10 +197,25 @@ def load_squad_data()->dict:
     with open(path, "r") as f:
         return json.load(f)
 
+
+def get_player_image(player):
+    def get_base64_image(path):
+            try : 
+                with open(path, "rb") as img_file:
+                    return base64.b64encode(img_file.read()).decode()
+            except Exception as e:
+                default_path = r'ipl_player_images\Aakash Chopra.png'
+                with open(default_path, "rb") as img_file:
+                    return base64.b64encode(img_file.read()).decode()
+
+    img_path = os.path.join("ipl_player_images", f"{player}.png")
+    return get_base64_image(img_path)
 stat_data  = load_stat_data()
 squad_data = load_squad_data()
 playerNames = load_player_names()
 PN_L_to_S = {playerNames[i]:i for i in playerNames}
+default_image = r'C:\\Users\\WELCOME\\Desktop\\Cricket_\\PlayerPerformancePrediction_Main_folder\\ipl_player_images\\ipl_player_images\\Anshul Kamboj.png'
+
 
 # ─── Data-missing guard ──────────────────────────────────────────────────────
 if stat_data is None or squad_data is None:
@@ -559,21 +576,34 @@ if page == "🏟️  All Player Stats":
 
     # Get all players from stat data
     all_players = sorted(list(PN_L_to_S.keys()))
-
+    
     # Player selection
-    selected_player = st.selectbox("Select Player", all_players, key="player_select")
+    
+    selected_player = st.selectbox("Select Player", all_players, key="player_select",)
 
     if selected_player:
         player_info = stat_data.get(PN_L_to_S[selected_player], {})
-
+        img_base64 = get_player_image(selected_player)
         # Player header with role classification
+        
+        st.markdown(f"""
+        <div style="display:flex;align-items:center;gap:16px;margin:12px 0 20px">
+            <img src="data:image/png;base64,{img_base64}"
+                style="width:200px;height:200px;border-radius:40px;object-fit:cover;border:2px solid #F97316;">
+        </div>
+        """, unsafe_allow_html=True)
+        st.markdown(f"""
+        <div style="display:flex;align-items:center;gap:16px;margin:12px 0 20px">
+                <div style="font-size:1.8rem;color:#E8EAF0;"> {   selected_player}</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
         
         if role_chip_Batter(PN_L_to_S[selected_player]) == "Batter":
             cs = career_summary_Batter(PN_L_to_S[selected_player])
             st.markdown(f"""
             <div style="display:flex;align-items:center;gap:16px;margin:12px 0 20px">
                 <div>
-                    <div style="font-family:'Bebas Neue',cursive;font-size:2rem;color:#E8EAF0;letter-spacing:2px">{selected_player}</div>
                     Batter
                     <span style="color:#64748B;font-size:.8rem;margin-left:8px">
                         Career Statistics
@@ -604,7 +634,6 @@ if page == "🏟️  All Player Stats":
             st.markdown(f"""
             <div style="display:flex;align-items:center;gap:16px;margin:12px 0 20px">
                 <div>
-                    <div style="font-family:'Bebas Neue',cursive;font-size:2rem;color:#E8EAF0;letter-spacing:2px"></div>
                     Bowler
                     <span style="color:#64748B;font-size:.8rem;margin-left:8px">
                         Career Statistics
@@ -780,7 +809,28 @@ if page == "🏟️  All Player Stats":
             if bowlers_list:
                 selected_bowler = st.selectbox("Select Bowler", sorted(bowlers_list), key="vs_bowler_select")
                 if selected_bowler:
-                    st.markdown(f"### {selected_player} vs {selected_bowler}")
+
+                    selected_player_img = get_player_image(selected_player)
+                    selected_bowler_img = get_player_image(selected_bowler)
+        # Player header with role classification
+        
+                    st.markdown(f"""
+                    <div style="display:flex;align-items:center;gap:16px;margin:12px 0 20px">
+                        <img src="data:image/png;base64,{selected_player_img}"
+                            style="width:200px;height:200px;border-radius:40px;object-fit:cover;border:2px solid #F97316;">
+                        <div style="font-size:1.8rem;color:#E8EAF0;"> VS </div>
+                        <img src="data:image/png;base64,{selected_bowler_img}"
+                            style="width:200px;height:200px;border-radius:40px;object-fit:cover;border:2px solid #F97316;">
+                    </div>
+                    """, unsafe_allow_html=True)
+                    st.markdown(f"""
+                    <div style="display:flex;align-items:center;gap:16px;margin:12px 0 20px">
+                            <div style="font-size:1.8rem;color:#E8EAF0;margin:0 20px">🏏 {selected_player}</div>
+                            <div style="font-size:1.8rem;color:#E8EAF0;margin:0 20px"> ⚾ {selected_bowler}</div>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
                     bowler_stats = stat_vs_bowler(PN_L_to_S[selected_player], selected_bowler)
 
 
@@ -880,7 +930,26 @@ if page == "🏟️  All Player Stats":
             if batters_list:
                 selected_batter = st.selectbox("Select Batter", sorted(batters_list), key="vs_batter_select")
                 if selected_batter:
-                    st.markdown(f"### {selected_player} vs {selected_batter}   ")
+                    selected_player_img = get_player_image(selected_player)
+                    selected_batter_img = get_player_image(selected_batter)
+        # Player header with role classification
+        
+                    st.markdown(f"""
+                    <div style="display:flex;align-items:center;gap:16px;margin:12px 0 20px">
+                        <img src="data:image/png;base64,{selected_player_img}"
+                            style="width:200px;height:200px;border-radius:40px;object-fit:cover;border:2px solid #F97316;">
+                        <div style="font-size:1.8rem;color:#E8EAF0;"> VS </div>
+                        <img src="data:image/png;base64,{selected_batter_img}"
+                            style="width:200px;height:200px;border-radius:40px;object-fit:cover;border:2px solid #F97316;">
+                    </div>
+                    """, unsafe_allow_html=True)
+                    st.markdown(f"""
+                    <div style="display:flex;align-items:center;gap:16px;margin:12px 0 20px">
+                            <div style="font-size:1.8rem;color:#E8EAF0;margin:0 10px">⚾ {selected_player}</div>
+                            <div style="font-size:1.8rem;color:#E8EAF0;margin:0 20px"> 🏏 {selected_batter}</div>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
 
                     batter_stats = stat_vs_batter(PN_L_to_S.get(selected_player, selected_player), selected_batter)
                     
