@@ -8,6 +8,9 @@ Run:  streamlit run app.py
 """
 
 import base64
+import math
+import math
+import re
 
 import streamlit as st
 import json, os
@@ -537,12 +540,13 @@ def predict_performance(player, opp_team):
     rec_avg = rec.get("Bt_Avg", 0)
     rec_sr  = rec.get("Bt_Strike_rate", 0)
 
-    pred_runs = round(h2h_avg * w_h2h + rec_avg * w_rec, 1)
-    pred_sr   = round(h2h_sr  * w_h2h + rec_sr  * w_rec, 1)
+    pred_runs = round(h2h_avg * w_h2h + rec_avg * w_rec, 0)
+    pred_sr   = round(h2h_sr  * w_h2h + rec_sr  * w_rec, 0)
 
     h2h_wkts  = vs.get("Gain_Wicket", 0)
     rec_wpm   = rec.get("Bw_Avg_Wickets", 0)
-    pred_wkts = round((h2h_wkts / h2h_m) * w_h2h + rec_wpm * w_rec, 2)
+    pred_wkts = (h2h_wkts / h2h_m) * w_h2h + rec_wpm * w_rec
+    pred_wkts = math.floor(pred_wkts + 0.5)
 
     h2h_econ  = vs.get("Bw_economy", 0)
     rec_econ  = rec.get("Bw_economy", 0)
@@ -550,8 +554,10 @@ def predict_performance(player, opp_team):
 
     six_list  = vs.get("Six_list", [])
     four_list = vs.get("four_list", [])
-    pred_4s   = round(sum(four_list) / max(len(four_list), 1), 1)
-    pred_6s   = round(sum(six_list)  / max(len(six_list), 1), 1)
+    pred_4s   = round(sum(four_list) / max(len(four_list), 1), 0)
+    pred_6s   = round(sum(six_list)  / max(len(six_list), 1), 0)
+    pred_4s   = math.floor(pred_4s + 0.5)
+    pred_6s   = math.floor(pred_6s + 0.5)
 
     return {
         "runs": pred_runs, "sr": pred_sr,
@@ -1005,8 +1011,26 @@ if page == "🏟️  All Player Stats":
                 ]):
                     c.markdown(f'<div class="stat-card"><div class="stat-val" style="color:{col};font-size:2rem">{val}</div><div class="stat-lbl">{lbl}</div></div>', unsafe_allow_html=True)
 
-                recent_runs  = rec.get("Bt_Runs", [])
-                recent_years = rec.get("year", [])
+                recent_runs_all  = rec.get("Bt_Runs", [])
+                recent_balls_all = rec.get("Bt_Balls", [])
+                recent_years_all = rec.get("year", [])
+                recent_inng_all = rec.get("inning", [])
+                recent_wick_all = rec.get("Bt_Wickets", [])
+                recent_runs  = []
+                recent_balls = []
+                recent_years = []
+                recent_inng = []
+                recent_wick = []
+                
+
+                for i in range(len(recent_balls_all)):
+                    if recent_balls_all[i] != 0:
+                        recent_runs.append(recent_runs_all[i])
+                        recent_balls.append(recent_balls_all[i])
+                        recent_years.append(recent_years_all[i])
+                        recent_inng.append(recent_inng_all[i])
+                        recent_wick.append(recent_wick_all[i])
+
                 if isinstance(recent_runs, list) and recent_runs:
                     match_options = [5, 10, 15, 20, "All"]
                     sel_m = st.selectbox(
@@ -1014,19 +1038,44 @@ if page == "🏟️  All Player Stats":
                         format_func=lambda x: f"Last {x} matches" if isinstance(x, int) else "All matches",
                         key="recent_matches_count"
                     )
+                    size_arr = len(recent_runs)
                     n_show = len(recent_runs) if sel_m == "All" else min(len(recent_runs), sel_m)
-                    runs_s  = recent_runs[:n_show]
-                    years_s = (recent_years[:n_show] if isinstance(recent_years, list) and recent_years
+                    runs_s  = recent_runs[size_arr-n_show:]
+                    inn  = recent_inng[size_arr-n_show:]
+                    wicket  = recent_wick[size_arr-n_show:]
+                    years_s = (recent_years[size_arr-n_show:] if isinstance(recent_years, list) and recent_years
                                else list(range(1, n_show + 1)))
+                    
+                    # fig = go.Figure(go.Bar(
+                    #     x=[years_s,inn,wicket],
+                    #     # x=list((f"{y}|{n}|{c}") for c, (y,n ) in enumerate(zip(years_s, inn))),
+                    #     y=runs_s,
+                    #     marker_color=['#F97316' if r >= 50 else '#FBBF24' if r >= 30 else '#374151' for r in runs_s],
+                    # ))
+                    x_vals = list(range(1, len(runs_s) + 1))
+
+                    out_status = ["Out" if b > 0 else "Not Out" for b in recent_balls[size_arr-n_show:]]
 
                     fig = go.Figure(go.Bar(
-                        x=list(range(1, n_show + 1)),
+                        x=x_vals,
                         y=runs_s,
-                        marker_color=['#F97316' if r >= 50 else '#FBBF24' if r >= 30 else '#374151' for r in runs_s],
+                        marker_color=[
+                            '#F97316' if r >= 50 else '#FBBF24' if r >= 30 else '#374151'
+                            for r in runs_s
+                        ],
+                        customdata=list(zip(years_s, inn, out_status)),
+                        hovertemplate=(
+                            "Match %{x}<br>"
+                            "Year: %{customdata[0]}<br>"
+                            "Inning: %{customdata[1]}<br>"
+                            "Status: %{customdata[2]}<br>"
+                            "Runs: %{y}<extra></extra>"
+                        )
                     ))
                     dark_fig_layout(fig, title=f"Recent Innings — Last {n_show} Matches",
                                     height=360, title_color="#FBBF24")
-                    fig.update_layout(xaxis_title="Match Number", yaxis_title="Runs")
+                    x_title = "Year/Innings/Wickets" if isinstance(recent_years, list) and recent_years else "Match Number"
+                    fig.update_layout(xaxis_title=x_title, yaxis_title="Runs")
                     st.plotly_chart(fig, use_container_width=True)
 
                     # Yearly summary
@@ -1222,107 +1271,115 @@ elif page == "⭐  Dream11 Predictor":
     st.markdown("**Select Playing XI for each team:**")
     col1, col2 = st.columns(2)
     with col1:
-        selected_players1 = st.multiselect(f"🔴 Select players for {team1}", list(squad1.keys()), default=[], key="sel_p1", max_selections=11)
+        selected_players1 = st.multiselect(f"🔴 Select players for {team1}", list(squad1.keys()), default=team_playing11_recently.get(team1, []), key=f"sel_p1_{team1}", max_selections=11)
     with col2:
-        selected_players2 = st.multiselect(f"🔵 Select players for {team2}", list(squad2.keys()), default=[], key="sel_p2", max_selections=11)
+        selected_players2 = st.multiselect(f"🔵 Select players for {team2}", list(squad2.keys()), default=team_playing11_recently.get(team2, []), key=f"sel_p2_{team2}", max_selections=11)
 
     # Filter squads to selected players
     if  len(selected_players1) < 11 or len(selected_players2) < 11:
         st.error(f"Please select at most 11 players for {team1} and {team2}.")
         st.stop()
-    selected_squad1 = {p: squad1[p] for p in selected_players1 if p in squad1}
-    selected_squad2 = {p: squad2[p] for p in selected_players2 if p in squad2}
 
-   
+    if st.button("Dream11 Predictor", key="Dream11predict_button"):
+        selected_squad1 = {p: squad1[p] for p in selected_players1 if p in squad1}
+        selected_squad2 = {p: squad2[p] for p in selected_players2 if p in squad2}
 
-    if not selected_squad1 or not selected_squad2:
-        st.error(f"Please select players for both teams.")
-        st.stop()
+    
 
- 
+        if not selected_squad1 or not selected_squad2:
+            st.error(f"Please select players for both teams.")
+            st.stop()
 
-    st.markdown(f'<p style="color:#64748B;margin-bottom:20px">{team1} vs {team2} — {season} · AI-powered pick</p>', unsafe_allow_html=True)
+    
 
-    selected = pick_dream11(selected_squad1, selected_squad2, team1, team2)
-    captain  = selected[0] if selected else None
-    vc       = selected[1] if len(selected) > 1 else None
+        st.markdown(f'<p style="color:#64748B;margin-bottom:20px">{team1} vs {team2} — {season} · AI-powered pick</p>', unsafe_allow_html=True)
 
-    # Summary row
-    t1c = sum(1 for p in selected if p["team"] == team1)
-    t2c = len(selected) - t1c
-    role_cnt = defaultdict(int)
-    for p in selected: role_cnt[p["role"]] += 1
+        selected = pick_dream11(selected_squad1, selected_squad2, team1, team2)
+        captain  = selected[0] if selected else None
+        vc       = selected[1] if len(selected) > 1 else None
 
-    c1, c2, c3, c4 = st.columns(4)
-    for col, (val, lbl, clr) in zip([c1, c2, c3, c4], [
-        (t1c, f"from {team1[:10]}", "#F97316"),
-        (t2c, f"from {team2[:10]}", "#60A5FA"),
-        (11,  "Total Players",      "#34D399"),
-        (f"{role_cnt['AR']} AR · {role_cnt['WK']} WK", "Balance", "#FBBF24"),
-    ]):
-        col.markdown(f'<div class="stat-card"><div class="stat-val" style="color:{clr}">{val}</div><div class="stat-lbl">{lbl}</div></div>', unsafe_allow_html=True)
+        # Summary row
+        t1c = sum(1 for p in selected if p["team"] == team1)
+        t2c = len(selected) - t1c
+        role_cnt = defaultdict(int)
+        for p in selected: role_cnt[p["role"]] += 1
 
-    st.divider()
+        c1, c2, c3, c4 = st.columns(4)
+        for col, (val, lbl, clr) in zip([c1, c2, c3, c4], [
+            (t1c, f"from {team1[:10]}", "#F97316"),
+            (t2c, f"from {team2[:10]}", "#60A5FA"),
+            (11,  "Total Players",      "#34D399"),
+            (f"{role_cnt['AR']} AR · {role_cnt['WK']} WK", "Balance", "#FBBF24"),
+        ]):
+            col.markdown(f'<div class="stat-card"><div class="stat-val" style="color:{clr}">{val}</div><div class="stat-lbl">{lbl}</div></div>', unsafe_allow_html=True)
 
-    ROLE_ICONS = {"WK": "🧤", "BAT": "🏏", "AR": "🔀", "BOWL": "⚾"}
-    ROLE_FULL  = {"WK": "WK-Batter", "BAT": "Batsman", "AR": "All-Rounder", "BOWL": "Bowler"}
-    CSS_R      = {"WK": "wk", "BAT": "bat", "AR": "ar", "BOWL": "bowl"}
+        st.divider()
 
-    for role_grp, grp_label in [("WK","🧤 WICKET-KEEPER"), ("BAT","🏏 BATSMEN"),
-                                  ("AR","🔀 ALL-ROUNDERS"), ("BOWL","⚾ BOWLERS")]:
-        grp_players = [p for p in selected if p["role"] == role_grp]
-        if not grp_players: continue
+        ROLE_ICONS = {"WK": "🧤", "BAT": "🏏", "AR": "🔀", "BOWL": "⚾"}
+        ROLE_FULL  = {"WK": "WK-Batter", "BAT": "Batsman", "AR": "All-Rounder", "BOWL": "Bowler"}
+        CSS_R      = {"WK": "wk", "BAT": "bat", "AR": "ar", "BOWL": "bowl"}
 
-        st.markdown(f'<div style="font-family:Bebas Neue;font-size:1rem;color:#64748B;letter-spacing:3px;margin:16px 0 8px">{grp_label}</div>', unsafe_allow_html=True)
-        cols = st.columns(max(len(grp_players), 1))
+        for role_grp, grp_label in [("WK","🧤 WICKET-KEEPER"), ("BAT","🏏 BATSMEN"),
+                                    ("AR","🔀 ALL-ROUNDERS"), ("BOWL","⚾ BOWLERS")]:
+            grp_players = [p for p in selected if p["role"] == role_grp]
+            if not grp_players: continue
 
-        for col, p in zip(cols, grp_players):
-            is_c  = (p == captain)
-            is_vc = (p == vc)
-            border = "#FFD700" if is_c else "#9CA3AF" if is_vc else "#1F2937"
-            t_col  = "#F97316" if p["team"] == team1 else "#60A5FA"
-            badge  = '<span class="cbadge">C</span>'  if is_c  else \
-                     '<span class="vcbadge">VC</span>' if is_vc else ''
-            css_r  = CSS_R.get(p["role"], "bat")
-            disp_name = playerNames.get(p["player"], p["player"])
+            st.markdown(f'<div style="font-family:Bebas Neue;font-size:1rem;color:#64748B;letter-spacing:3px;margin:16px 0 8px">{grp_label}</div>', unsafe_allow_html=True)
+            cols = st.columns(max(len(grp_players), 1))
 
-            col.markdown(f"""
-            <div class="d11card" style="border-color:{border}">
-                <div style="font-size:1.8rem">{ROLE_ICONS.get(p['role'],'🏏')}</div>
-                <div class="d11name">{disp_name[:16]}</div>
-                <div style="color:{t_col};font-size:.7rem;font-weight:600;margin:3px 0">{p['team'][:14]}</div>
-                {badge}
-                <div style="margin-top:8px"><span class="pchip {css_r}">{ROLE_FULL.get(p['role'],'BAT')}</span></div>
-                <div style="margin-top:8px;font-size:.78rem;color:#64748B">
-                    Score: <span style="color:#FFD700;font-weight:700">{p['score']}</span>
-                </div>
-            </div>""", unsafe_allow_html=True)
+            for col, p in zip(cols, grp_players):
+                is_c  = (p == captain)
+                is_vc = (p == vc)
+                border = "#FFD700" if is_c else "#9CA3AF" if is_vc else "#1F2937"
+                t_col  = "#F97316" if p["team"] == team1 else "#60A5FA"
+                badge  = '<span class="cbadge">C</span>'  if is_c  else \
+                        '<span class="vcbadge">VC</span>' if is_vc else '<span class="vcbadge">P</span>'
+                css_r  = CSS_R.get(p["role"], "bat")
+                disp_name = playerNames.get(p["player"], p["player"])
+                img = get_player_image(p["player"])
+                with col:
+                    st.markdown(f"""
+                    <div class="d11card" style="border-color:{border}">
+                        <img src="data:image/png;base64,{img}"
+                            style="width:40%;height:50%;object-fit:cover;border-radius:8px">
+                        <div style="font-size:1.8rem">{ROLE_ICONS.get(p['role'],'🏏')}</div>
+                        <div class="d11name">{disp_name[:16]}</div>
+                        <div style="color:{t_col};font-size:.7rem;font-weight:600;margin:3px 0">{p['team'][:14]}</div>
+                        {badge}
+                        <div style="margin-top:8px">
+                            <span class="pchip {css_r}">{ROLE_FULL.get(p['role'],'BAT')}</span>
+                        </div>
+                        <p style="margin-top:8px;font-size:.78rem;color:#64748B">
+                            Score: <span style="color:#FFD700;font-weight:700">{p['score']}</span>
+                        </p>
+                    </div>
+                    """, unsafe_allow_html=True)
 
-    # ── Score bar ──
-    st.divider()
-    st.markdown('<div class="sec-hdr" style="font-size:1.2rem">📊 SCORE BREAKDOWN</div>', unsafe_allow_html=True)
-    disp_names = [playerNames.get(p["player"], p["player"])[:12] for p in selected]
-    fig_d11 = go.Figure(go.Bar(
-        x=disp_names, y=[p["score"] for p in selected],
-        marker_color=[
-            "#FFD700" if p == captain else "#9CA3AF" if p == vc else
-            "#F97316" if p["team"] == team1 else "#60A5FA"
-            for p in selected
-        ],
-        text=[str(p["score"]) for p in selected], textposition='outside',
-    ))
-    dark_fig_layout(fig_d11, height=320)
-    fig_d11.update_layout(xaxis=dict(tickangle=-35, gridcolor="#1F2937"))
-    st.plotly_chart(fig_d11, use_container_width=True)
+        # ── Score bar ──
+        st.divider()
+        st.markdown('<div class="sec-hdr" style="font-size:1.2rem">📊 SCORE BREAKDOWN</div>', unsafe_allow_html=True)
+        disp_names = [playerNames.get(p["player"], p["player"])[:12] for p in selected]
+        fig_d11 = go.Figure(go.Bar(
+            x=disp_names, y=[p["score"] for p in selected],
+            marker_color=[
+                "#FFD700" if p == captain else "#9CA3AF" if p == vc else
+                "#F97316" if p["team"] == team1 else "#60A5FA"
+                for p in selected
+            ],
+            text=[str(p["score"]) for p in selected], textposition='outside',
+        ))
+        dark_fig_layout(fig_d11, height=320)
+        fig_d11.update_layout(xaxis=dict(tickangle=-35, gridcolor="#1F2937"))
+        st.plotly_chart(fig_d11, use_container_width=True)
 
-    df_d11 = pd.DataFrame([{
-        "Player": playerNames.get(p["player"], p["player"]),
-        "Team":   p["team"],
-        "Role":   ROLE_FULL.get(p["role"], "BAT"),
-        "Score":  p["score"],
-        "Tag":    "C" if p == captain else "VC" if p == vc else "",
-    } for p in selected])
-    st.dataframe(df_d11.sort_values("Score", ascending=False), use_container_width=True, hide_index=True)
+        df_d11 = pd.DataFrame([{
+            "Player": playerNames.get(p["player"], p["player"]),
+            "Team":   p["team"],
+            "Role":   ROLE_FULL.get(p["role"], "BAT"),
+            "Score":  p["score"],
+            "Tag":    "C" if p == captain else "VC" if p == vc else "",
+        } for p in selected])
+        st.dataframe(df_d11.sort_values("Score", ascending=False), use_container_width=True, hide_index=True)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1339,203 +1396,208 @@ elif page == "🔮  Match Scorecard Prediction":
 
     squad1 = get_squad(team1, season)
     squad2 = get_squad(team2, season)
+
+    # Player selection for each team
     st.markdown("**Select Playing XI for each team:**")
     col1, col2 = st.columns(2)
     with col1:
-        selected_players1 = st.multiselect(f"🔴 Select players for {team1}", list(squad1.keys()), default=[], key="sel_p1", max_selections=11)
+        selected_players1 = st.multiselect(f"🔴 Select players for {team1}", list(squad1.keys()), default=team_playing11_recently.get(team1, []), key=f"sel_p1_{team1}", max_selections=11)
     with col2:
-        selected_players2 = st.multiselect(f"🔵 Select players for {team2}", list(squad2.keys()), default=[], key="sel_p2", max_selections=11)
+        selected_players2 = st.multiselect(f"🔵 Select players for {team2}", list(squad2.keys()), default=team_playing11_recently.get(team2, []), key=f"sel_p2_{team2}", max_selections=11)
 
     # Filter squads to selected players
     if  len(selected_players1) < 11 or len(selected_players2) < 11:
         st.error(f"Please select at most 11 players for {team1} and {team2}.")
         st.stop()
-    selected_squad1 = {p: squad1[p] for p in selected_players1 if p in squad1}
-    selected_squad2 = {p: squad2[p] for p in selected_players2 if p in squad2}
+    
 
-   
+    if st.button("Match Score Predictor", key="Match_scorepredict_button"):
+        selected_squad1 = {p: squad1[p] for p in selected_players1 if p in squad1}
+        selected_squad2 = {p: squad2[p] for p in selected_players2 if p in squad2}
 
-    if not selected_squad1 or not selected_squad2:
-        st.error(f"Please select players for both teams.")
-        st.stop()
+    
 
- 
+        if not selected_squad1 or not selected_squad2:
+            st.error(f"Please select players for both teams.")
+            st.stop()
 
-    st.markdown(f'<p style="color:#64748B;margin-bottom:20px">{team1} vs {team2} · {season} — Statistical model (H2H × Recent form blend)</p>', unsafe_allow_html=True)
+    
 
-    ROLE_FULL2 = {"WK": "🧤WK", "BAT": "🏏Bat", "AR": "🔀AR", "BOWL": "⚾Bowl"}
+        st.markdown(f'<p style="color:#64748B;margin-bottom:20px">{team1} vs {team2} · {season} — Statistical model (H2H × Recent form blend)</p>', unsafe_allow_html=True)
 
-    def build_scorecard(squad, opp_team):
-        rows = []
-        for p, info in squad.items():
-            pred = predict_performance(p, opp_team)
-            role = ROLE_MAP.get(info.get("role", "Batter"), classify_role(p))
-            rows.append({
-                "Player":    playerNames.get(p, p),
-                "Role":      role,
-                "Pred Runs": pred["runs"],
-                "Pred SR":   pred["sr"],
-                "Pred 4s":   pred["fours"],
-                "Pred 6s":   pred["sixes"],
-                "Pred Wkts": pred["wickets"],
-                "Pred Econ": pred["economy"],
-                "H2H Games": pred["h2h_matches"],
-            })
-        return sorted(rows, key=lambda x: x["Pred Runs"], reverse=True)
+        ROLE_FULL2 = {"WK": "🧤WK", "BAT": "🏏Bat", "AR": "🔀AR", "BOWL": "⚾Bowl"}
 
-    def render_scorecard(squad, opp_team, team_name, color):
-        rows = build_scorecard(squad, opp_team)
-        top5 = rows[:5]
-        cols = st.columns(5)
-        for col, r in zip(cols, top5):
-            conf = "🔥" if r["Pred Runs"] >= 35 else "✅" if r["Pred Runs"] >= 20 else "📉"
-            col.markdown(f"""
-            <div class="stat-card" style="border-left:3px solid {color}">
-                <div style="font-size:.7rem;color:#64748B;margin-bottom:2px">{conf} {r['Player'][:14]}</div>
-                <div class="stat-val" style="color:{color};font-size:2rem">{r['Pred Runs']}</div>
-                <div class="stat-lbl">PRED RUNS</div>
-                <div style="color:#64748B;font-size:.7rem;margin-top:4px">
-                    SR {r['Pred SR']:.0f} · {r['Pred 4s']}×4 · {r['Pred 6s']}×6
-                </div>
-            </div>""", unsafe_allow_html=True)
+        def build_scorecard(squad, opp_team):
+            rows = []
+            for p, info in squad.items():
+                pred = predict_performance(p, opp_team)
+                role = ROLE_MAP.get(info.get("role", "Batter"), classify_role(p))
+                rows.append({
+                    "Player":    playerNames.get(p, p),
+                    "Role":      role,
+                    "Pred Runs": pred["runs"],
+                    "Pred SR":   pred["sr"],
+                    "Pred 4s":   pred["fours"],
+                    "Pred 6s":   pred["sixes"],
+                    "Pred Wkts": pred["wickets"],
+                    "Pred Econ": pred["economy"],
+                    "H2H Games": pred["h2h_matches"],
+                })
+            return sorted(rows, key=lambda x: x["Pred Runs"], reverse=True)
 
-        st.markdown("<br>", unsafe_allow_html=True)
-
-        fig = go.Figure(go.Bar(
-            x=[r["Player"][:12] for r in rows], y=[r["Pred Runs"] for r in rows],
-            marker_color=color, opacity=.85,
-            text=[str(r["Pred Runs"]) for r in rows], textposition='outside',
-        ))
-        dark_fig_layout(fig, title=f"Predicted Batting — {team_name}", height=300, title_color=color)
-        fig.update_layout(xaxis=dict(tickangle=-40, gridcolor="#1F2937"))
-        st.plotly_chart(fig, use_container_width=True)
-
-        bowl_rows = sorted([r for r in rows if r["Pred Wkts"] > 0],
-                           key=lambda x: x["Pred Wkts"], reverse=True)
-        if bowl_rows:
-            fig2 = go.Figure(go.Bar(
-                x=[r["Player"][:12] for r in bowl_rows], y=[r["Pred Wkts"] for r in bowl_rows],
-                marker_color="#60A5FA",
-                text=[f"{r['Pred Wkts']:.2f}" for r in bowl_rows], textposition='outside',
-            ))
-            dark_fig_layout(fig2, title=f"Predicted Wickets — {team_name}", height=280, title_color="#60A5FA")
-            fig2.update_layout(xaxis=dict(tickangle=-40, gridcolor="#1F2937"))
-            st.plotly_chart(fig2, use_container_width=True)
-
-        st.markdown("**Full Prediction Table**")
-        df = pd.DataFrame([{
-            "Player":   r["Player"],
-            "Role":     ROLE_FULL2.get(r["Role"], "🏏Bat"),
-            "Pred Runs":r["Pred Runs"],
-            "Pred SR":  r["Pred SR"],
-            "4s":       r["Pred 4s"],
-            "6s":       r["Pred 6s"],
-            "Wkts":     f"{r['Pred Wkts']:.2f}",
-            "Economy":  f"{r['Pred Econ']:.2f}" if r["Pred Econ"] > 0 else "—",
-            "H2H M":    r["H2H Games"],
-        } for r in rows])
-        st.dataframe(df, use_container_width=True, hide_index=True, height=380)
-        return sum(r["Pred Runs"] for r in rows), rows
-
-    tab_t1, tab_t2, tab_sum = st.tabs([f"🔴 {team1}", f"🔵 {team2}", "🏆 Match Summary"])
-
-    with tab_t1:
-        t1_total, t1_rows = render_scorecard(selected_squad1, team2, team1, "#F97316")
-    with tab_t2:
-        t2_total, t2_rows = render_scorecard(selected_squad2, team1, team2, "#60A5FA")
-    with tab_sum:
-        st.markdown('<div class="sec-hdr" style="font-size:1.4rem">🏆 PREDICTED MATCH SUMMARY</div>', unsafe_allow_html=True)
-
-        c1, c2, c3 = st.columns([2, 1, 2])
-        with c1:
-            st.markdown(f"""
-            <div class="stat-card" style="border-left:4px solid #F97316;padding:28px">
-                <div style="font-family:'Bebas Neue';font-size:1.4rem;color:#F97316;letter-spacing:2px">{team1}</div>
-                <div style="font-family:'Bebas Neue';font-size:3.5rem;color:#E8EAF0;margin:8px 0">{int(t1_total)}</div>
-                <div style="color:#64748B;font-size:.8rem">PREDICTED TEAM RUNS</div>
-            </div>""", unsafe_allow_html=True)
-        with c2:
-            st.markdown('<div style="display:flex;align-items:center;justify-content:center;height:100%;font-family:\'Bebas Neue\';font-size:2rem;color:#64748B;letter-spacing:3px">VS</div>', unsafe_allow_html=True)
-        with c3:
-            st.markdown(f"""
-            <div class="stat-card" style="border-left:4px solid #60A5FA;padding:28px">
-                <div style="font-family:'Bebas Neue';font-size:1.4rem;color:#60A5FA;letter-spacing:2px">{team2}</div>
-                <div style="font-family:'Bebas Neue';font-size:3.5rem;color:#E8EAF0;margin:8px 0">{int(t2_total)}</div>
-                <div style="color:#64748B;font-size:.8rem">PREDICTED TEAM RUNS</div>
-            </div>""", unsafe_allow_html=True)
-
-        st.divider()
-
-        winner  = team1 if t1_total >= t2_total else team2
-        margin  = abs(t1_total - t2_total)
-        w_col   = "#F97316" if winner == team1 else "#60A5FA"
-        conf    = "HIGH" if margin > 30 else "MEDIUM" if margin > 15 else "LOW"
-        conf_c  = "#34D399" if conf == "HIGH" else "#FBBF24" if conf == "MEDIUM" else "#EF4444"
-
-        st.markdown(f"""
-        <div style="text-align:center;padding:32px;background:linear-gradient(135deg,#111827,#1E2A3B);
-                    border-radius:16px;border:1px solid {w_col}">
-            <div style="color:#64748B;font-size:.8rem;letter-spacing:3px;text-transform:uppercase">Predicted Winner</div>
-            <div style="font-family:'Bebas Neue';font-size:3rem;color:{w_col};letter-spacing:4px;margin:8px 0">{winner}</div>
-            <div style="color:#64748B;font-size:.85rem">
-                by ~{int(margin)} runs &nbsp;|&nbsp;
-                Confidence: <span style="color:{conf_c};font-weight:700">{conf}</span>
-            </div>
-        </div>""", unsafe_allow_html=True)
-
-        st.divider()
-
-        # Key players
-        st.markdown("**🌟 Key Players to Watch**")
-        all_rows = [(r, team1) for r in t1_rows] + [(r, team2) for r in t2_rows]
-        all_rows.sort(key=lambda x: x[0]["Pred Runs"], reverse=True)
-        top_watch = all_rows[:6]
-        cols = st.columns(3)
-        for i, (r, t) in enumerate(top_watch):
-            col = "#F97316" if t == team1 else "#60A5FA"
-            with cols[i % 3]:
-                st.markdown(f"""
-                <div class="stat-card" style="border-left:3px solid {col};margin-bottom:12px">
-                    <div style="color:{col};font-size:.72rem;font-weight:600">{t[:14]}</div>
-                    <div style="font-family:'Bebas Neue';font-size:1.3rem;color:#E8EAF0">{r['Player'][:18]}</div>
-                    <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:.78rem">
-                        <span style="color:#FBBF24">🏏 {r['Pred Runs']} runs</span>
-                        <span style="color:#60A5FA">⚾ {r['Pred Wkts']:.1f} wkts</span>
+        def render_scorecard(squad, opp_team, team_name, color):
+            rows = build_scorecard(squad, opp_team)
+            top5 = rows[:5]
+            cols = st.columns(5)
+            for col, r in zip(cols, top5):
+                conf = "🔥" if r["Pred Runs"] >= 35 else "✅" if r["Pred Runs"] >= 20 else "📉"
+                col.markdown(f"""
+                <div class="stat-card" style="border-left:3px solid {color}">
+                    <div style="font-size:.7rem;color:#64748B;margin-bottom:2px">{conf} {r['Player'][:14]}</div>
+                    <div class="stat-val" style="color:{color};font-size:2rem">{r['Pred Runs']}</div>
+                    <div class="stat-lbl">PRED RUNS</div>
+                    <div style="color:#64748B;font-size:.7rem;margin-top:4px">
+                        SR {r['Pred SR']:.0f} · {r['Pred 4s']}×4 · {r['Pred 6s']}×6
                     </div>
                 </div>""", unsafe_allow_html=True)
 
-        # Team radar
-        st.divider()
-        st.markdown("**Team Strength Comparison**")
-        def tr_vals_rows(rows):
-            if not rows: return [0]*5
-            return [
-                np.mean([r["Pred Runs"] for r in rows]),
-                np.mean([r["Pred SR"]   for r in rows]),
-                sum(r["Pred Wkts"]       for r in rows),
-                max(r["Pred Runs"]       for r in rows),
-                sum(1 for r in rows if r["Pred Runs"] >= 20),
-            ]
+            st.markdown("<br>", unsafe_allow_html=True)
 
-        rv1, rv2 = tr_vals_rows(t1_rows), tr_vals_rows(t2_rows)
-        mx = [max(a, b, 0.01) for a, b in zip(rv1, rv2)]
-        rv1n = [min(v/m*100, 100) for v, m in zip(rv1, mx)]
-        rv2n = [min(v/m*100, 100) for v, m in zip(rv2, mx)]
-        cats = ["Team Runs", "Avg SR", "Wickets", "Top Score", "Depth"]
+            fig = go.Figure(go.Bar(
+                x=[r["Player"][:12] for r in rows], y=[r["Pred Runs"] for r in rows],
+                marker_color=color, opacity=.85,
+                text=[str(r["Pred Runs"]) for r in rows], textposition='outside',
+            ))
+            dark_fig_layout(fig, title=f"Predicted Batting — {team_name}", height=300, title_color=color)
+            fig.update_layout(xaxis=dict(tickangle=-40, gridcolor="#1F2937"))
+            st.plotly_chart(fig, use_container_width=True)
 
-        fig_r2 = go.Figure()
-        fig_r2.add_trace(go.Scatterpolar(r=rv1n+[rv1n[0]], theta=cats+[cats[0]],
-            fill='toself', name=team1, line_color='#F97316', fillcolor='rgba(249,115,22,.2)'))
-        fig_r2.add_trace(go.Scatterpolar(r=rv2n+[rv2n[0]], theta=cats+[cats[0]],
-            fill='toself', name=team2, line_color='#60A5FA', fillcolor='rgba(96,165,250,.15)'))
-        fig_r2.update_layout(
-            polar=dict(radialaxis=dict(range=[0, 100], gridcolor='#1F2937', color='#64748B'),
-                       angularaxis=dict(gridcolor='#1F2937', color='#64748B'),
-                       bgcolor='rgba(0,0,0,0)'),
-            paper_bgcolor='rgba(0,0,0,0)', font_color='#CBD5E1',
-            legend=dict(bgcolor='rgba(0,0,0,0)'), height=400,
-        )
-        st.plotly_chart(fig_r2, use_container_width=True)
+            bowl_rows = sorted([r for r in rows if r["Pred Wkts"] > 0],
+                            key=lambda x: x["Pred Wkts"], reverse=True)
+            if bowl_rows:
+                fig2 = go.Figure(go.Bar(
+                    x=[r["Player"][:12] for r in bowl_rows], y=[r["Pred Wkts"] for r in bowl_rows],
+                    marker_color="#60A5FA",
+                    text=[f"{r['Pred Wkts']:.2f}" for r in bowl_rows], textposition='outside',
+                ))
+                dark_fig_layout(fig2, title=f"Predicted Wickets — {team_name}", height=280, title_color="#60A5FA")
+                fig2.update_layout(xaxis=dict(tickangle=-40, gridcolor="#1F2937"))
+                st.plotly_chart(fig2, use_container_width=True)
+
+            st.markdown("**Full Prediction Table**")
+            df = pd.DataFrame([{
+                "Player":   r["Player"],
+                "Role":     ROLE_FULL2.get(r["Role"], "🏏Bat"),
+                "Pred Runs":r["Pred Runs"],
+                "Pred SR":  r["Pred SR"],
+                "4s":       r["Pred 4s"],
+                "6s":       r["Pred 6s"],
+                "Wkts":     f"{r['Pred Wkts']:.2f}",
+                "Economy":  f"{r['Pred Econ']:.2f}" if r["Pred Econ"] > 0 else "—",
+                "H2H M":    r["H2H Games"],
+            } for r in rows])
+            st.dataframe(df, use_container_width=True, hide_index=True, height=380)
+            return sum(r["Pred Runs"] for r in rows), rows
+
+        tab_t1, tab_t2, tab_sum = st.tabs([f"🔴 {team1}", f"🔵 {team2}", "🏆 Match Summary"])
+
+        with tab_t1:
+            t1_total, t1_rows = render_scorecard(selected_squad1, team2, team1, "#F97316")
+        with tab_t2:
+            t2_total, t2_rows = render_scorecard(selected_squad2, team1, team2, "#60A5FA")
+        with tab_sum:
+            st.markdown('<div class="sec-hdr" style="font-size:1.4rem">🏆 PREDICTED MATCH SUMMARY</div>', unsafe_allow_html=True)
+
+            c1, c2, c3 = st.columns([2, 1, 2])
+            with c1:
+                st.markdown(f"""
+                <div class="stat-card" style="border-left:4px solid #F97316;padding:28px">
+                    <div style="font-family:'Bebas Neue';font-size:1.4rem;color:#F97316;letter-spacing:2px">{team1}</div>
+                    <div style="font-family:'Bebas Neue';font-size:3.5rem;color:#E8EAF0;margin:8px 0">{int(t1_total)}</div>
+                    <div style="color:#64748B;font-size:.8rem">PREDICTED TEAM RUNS</div>
+                </div>""", unsafe_allow_html=True)
+            with c2:
+                st.markdown('<div style="display:flex;align-items:center;justify-content:center;height:100%;font-family:\'Bebas Neue\';font-size:2rem;color:#64748B;letter-spacing:3px">VS</div>', unsafe_allow_html=True)
+            with c3:
+                st.markdown(f"""
+                <div class="stat-card" style="border-left:4px solid #60A5FA;padding:28px">
+                    <div style="font-family:'Bebas Neue';font-size:1.4rem;color:#60A5FA;letter-spacing:2px">{team2}</div>
+                    <div style="font-family:'Bebas Neue';font-size:3.5rem;color:#E8EAF0;margin:8px 0">{int(t2_total)}</div>
+                    <div style="color:#64748B;font-size:.8rem">PREDICTED TEAM RUNS</div>
+                </div>""", unsafe_allow_html=True)
+
+            st.divider()
+
+            winner  = team1 if t1_total >= t2_total else team2
+            margin  = abs(t1_total - t2_total)
+            w_col   = "#F97316" if winner == team1 else "#60A5FA"
+            conf    = "HIGH" if margin > 30 else "MEDIUM" if margin > 15 else "LOW"
+            conf_c  = "#34D399" if conf == "HIGH" else "#FBBF24" if conf == "MEDIUM" else "#EF4444"
+
+            st.markdown(f"""
+            <div style="text-align:center;padding:32px;background:linear-gradient(135deg,#111827,#1E2A3B);
+                        border-radius:16px;border:1px solid {w_col}">
+                <div style="color:#64748B;font-size:.8rem;letter-spacing:3px;text-transform:uppercase">Predicted Winner</div>
+                <div style="font-family:'Bebas Neue';font-size:3rem;color:{w_col};letter-spacing:4px;margin:8px 0">{winner}</div>
+                <div style="color:#64748B;font-size:.85rem">
+                    by ~{int(margin)} runs &nbsp;|&nbsp;
+                    Confidence: <span style="color:{conf_c};font-weight:700">{conf}</span>
+                </div>
+            </div>""", unsafe_allow_html=True)
+
+            st.divider()
+
+            # Key players
+            st.markdown("**🌟 Key Players to Watch**")
+            all_rows = [(r, team1) for r in t1_rows] + [(r, team2) for r in t2_rows]
+            all_rows.sort(key=lambda x: x[0]["Pred Runs"], reverse=True)
+            top_watch = all_rows[:6]
+            cols = st.columns(3)
+            for i, (r, t) in enumerate(top_watch):
+                col = "#F97316" if t == team1 else "#60A5FA"
+                with cols[i % 3]:
+                    st.markdown(f"""
+                    <div class="stat-card" style="border-left:3px solid {col};margin-bottom:12px">
+                        <div style="color:{col};font-size:.72rem;font-weight:600">{t[:14]}</div>
+                        <div style="font-family:'Bebas Neue';font-size:1.3rem;color:#E8EAF0">{r['Player'][:18]}</div>
+                        <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:.78rem">
+                            <span style="color:#FBBF24">🏏 {r['Pred Runs']} runs</span>
+                            <span style="color:#60A5FA">⚾ {r['Pred Wkts']:.1f} wkts</span>
+                        </div>
+                    </div>""", unsafe_allow_html=True)
+
+            # Team radar
+            st.divider()
+            st.markdown("**Team Strength Comparison**")
+            def tr_vals_rows(rows):
+                if not rows: return [0]*5
+                return [
+                    np.mean([r["Pred Runs"] for r in rows]),
+                    np.mean([r["Pred SR"]   for r in rows]),
+                    sum(r["Pred Wkts"]       for r in rows),
+                    max(r["Pred Runs"]       for r in rows),
+                    sum(1 for r in rows if r["Pred Runs"] >= 20),
+                ]
+
+            rv1, rv2 = tr_vals_rows(t1_rows), tr_vals_rows(t2_rows)
+            mx = [max(a, b, 0.01) for a, b in zip(rv1, rv2)]
+            rv1n = [min(v/m*100, 100) for v, m in zip(rv1, mx)]
+            rv2n = [min(v/m*100, 100) for v, m in zip(rv2, mx)]
+            cats = ["Team Runs", "Avg SR", "Wickets", "Top Score", "Depth"]
+
+            fig_r2 = go.Figure()
+            fig_r2.add_trace(go.Scatterpolar(r=rv1n+[rv1n[0]], theta=cats+[cats[0]],
+                fill='toself', name=team1, line_color='#F97316', fillcolor='rgba(249,115,22,.2)'))
+            fig_r2.add_trace(go.Scatterpolar(r=rv2n+[rv2n[0]], theta=cats+[cats[0]],
+                fill='toself', name=team2, line_color='#60A5FA', fillcolor='rgba(96,165,250,.15)'))
+            fig_r2.update_layout(
+                polar=dict(radialaxis=dict(range=[0, 100], gridcolor='#1F2937', color='#64748B'),
+                        angularaxis=dict(gridcolor='#1F2937', color='#64748B'),
+                        bgcolor='rgba(0,0,0,0)'),
+                paper_bgcolor='rgba(0,0,0,0)', font_color='#CBD5E1',
+                legend=dict(bgcolor='rgba(0,0,0,0)'), height=400,
+            )
+            st.plotly_chart(fig_r2, use_container_width=True)
 
 
 # ─── Footer ───────────────────────────────────────────────────────────────────
