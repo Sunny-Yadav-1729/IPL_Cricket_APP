@@ -182,7 +182,7 @@ def load_squad_data() -> dict:
         return {}
     with open(path, "r") as f:
         return json.load(f)
-
+@st.cache_data
 def get_teams_playing_recently():
     path = "teams_playing_11_players.json"
     if not os.path.exists(path):
@@ -190,24 +190,24 @@ def get_teams_playing_recently():
     with open(path, "r") as f:
         return json.load(f)
     
-def update_teams_playing_recently(team1, team2, selected_players1, selected_players2):
-    path = "teams_playing_11_players.json"
-    if team_playing11_recently.get(str(team1)) == []:
-       team_playing11_recently[str(team1)] = selected_players1
-    if team_playing11_recently.get(str(team2)) == []:
-        team_playing11_recently[str(team2)] = selected_players2
+# def update_teams_playing_recently(team1, team2, selected_players1, selected_players2):
+#     path = "teams_playing_11_players.json"
+#     if team_playing11_recently.get(str(team1)) == []:
+#        team_playing11_recently[str(team1)] = selected_players1
+#     if team_playing11_recently.get(str(team2)) == []:
+#         team_playing11_recently[str(team2)] = selected_players2
 
     
 
-    if os.path.exists(path):
-        with open(path, "r") as f:
-            old_data = json.load(f)
-    else:
-        old_data = {}
+#     if os.path.exists(path):
+#         with open(path, "r") as f:
+#             old_data = json.load(f)
+#     else:
+#         old_data = {}
 
-    if old_data != team_playing11_recently:
-        with open(path, "w") as f:
-            json.dump(team_playing11_recently, f)
+#     if old_data != team_playing11_recently:
+#         with open(path, "w") as f:
+#             json.dump(team_playing11_recently, f)
 
 def get_player_image(player):
     def get_base64_image(path):
@@ -1088,8 +1088,8 @@ elif page == "👤  Prediction Match Wins":
 
        
 
-        if selected_squad1 and  selected_squad2:
-            update_teams_playing_recently(team1, team2, selected_players1, selected_players2)
+        # if selected_squad1 and  selected_squad2:
+        #     update_teams_playing_recently(team1, team2, selected_players1, selected_players2)
 
             
 
