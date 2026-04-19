@@ -1070,9 +1070,9 @@ elif page == "👤  Prediction Match Wins":
     st.markdown("**Select Playing XI for each team:**")
     col1, col2 = st.columns(2)
     with col1:
-        selected_players1 = st.multiselect(f"🔴 Select players for {team1}", list(squad1.keys()), default=team_playing11_recently.get(team1, []), key="sel_p1", max_selections=11)
+        selected_players1 = st.multiselect(f"🔴 Select players for {team1}", list(squad1.keys()), default=team_playing11_recently.get(team1, []), key=f"sel_p1_{team1}", max_selections=11)
     with col2:
-        selected_players2 = st.multiselect(f"🔵 Select players for {team2}", list(squad2.keys()), default=team_playing11_recently.get(team2, []), key="sel_p2", max_selections=11)
+        selected_players2 = st.multiselect(f"🔵 Select players for {team2}", list(squad2.keys()), default=team_playing11_recently.get(team2, []), key=f"sel_p2_{team2}", max_selections=11)
 
     # Filter squads to selected players
     if  len(selected_players1) < 11 or len(selected_players2) < 11:
