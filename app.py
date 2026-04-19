@@ -192,9 +192,9 @@ def get_teams_playing_recently():
     
 def update_teams_playing_recently(team1, team2, selected_players1, selected_players2):
     path = "teams_playing_11_players.json"
-    if team_playing11_recently.get(str(team1)) != []:
+    if team_playing11_recently.get(str(team1)) == []:
        team_playing11_recently[str(team1)] = selected_players1
-    if team_playing11_recently.get(str(team2)) != []:
+    if team_playing11_recently.get(str(team2)) == []:
         team_playing11_recently[str(team2)] = selected_players2
 
     
