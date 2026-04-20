@@ -275,6 +275,15 @@ def get_common_seasons(t1, t2):
     s2 = set(squad_data.get(t2, {}).keys())
     return sorted(s1 & s2, reverse=True)
 
+def get_team_players(team,season=None):
+    if season:
+        return sorted(squad_data.get(team, {}).get(season, {}).get("Players_Detail", {}).keys())
+    else:
+        players = set()
+        for s in squad_data.get(team, {}):
+            players.update(squad_data[team][s].get("Players_Detail", {}).keys())
+    return sorted(players)
+
 # ── Stat lookups ─────────────────────────────────────────────────────────────
 
 def stat_vs_team(player, opp_team):
@@ -705,8 +714,8 @@ if page == "🏟️  All Player Stats":
             st.divider()
 
         # ── Tabs ──
-        tab_career, tab_vs_teams, tab_vs_bowlers, tab_vs_batters, tab_recent = st.tabs([
-            "📈 Career Overview", "🆚 vs Teams", "⚾ vs Bowlers", "🏏 vs Batters", "📊 Recent Form"
+        tab_career, tab_vs_teams, tab_vs_bowlers, tab_vs_batters, tab_vs_team_players, tab_recent = st.tabs([
+            "📈 Career Overview", "🆚 vs Teams", "⚾ vs Bowlers", "🏏 vs Batters", "👥 vs Team Players", "📊 Recent Form"
         ])
 
         # ── Career Overview ──────────────────────────────────────────
@@ -832,6 +841,67 @@ if page == "🏟️  All Player Stats":
             else:
                 st.info("No team-wise statistics available.")
 
+        # ── vs Team Players ──────────────────────────────────────────
+        with tab_vs_team_players:
+            team_stats = all_teams_stats(short_name)
+            team_list  = sorted(team_stats.keys())
+            if team_list:
+                selected_opp_team = st.selectbox("Select opponent team", team_list, key="vs_team_players_select")
+                selected_season = st.selectbox("Select season", squad_data.get(selected_opp_team, {}).keys(), key="vs_team_players_season_select")
+                if selected_opp_team:
+                    st.markdown(f"### 👥 {selected_player} vs {selected_opp_team} Players")
+                    opp_team_players = get_team_players(selected_opp_team, selected_season)
+
+                    if opp_team_players:
+                        st.markdown(f"**Batting record vs {selected_opp_team} bowlers**")
+                        batting_rows = []
+                        for opp_player in opp_team_players:
+                            stat = stat_vs_bowler(short_name, opp_player)
+                            if stat.get("Matches", 0) > 0:
+                                batting_rows.append({
+                                    "Bowler": opp_player,
+                                    "Matches": stat.get("Matches", 0),
+                                    "Runs": stat.get("Runs", 0),
+                                    "Balls": stat.get("Balls", 0),
+                                    "SR": round(stat.get("Strike_rate", 0), 1),
+                                    "Avg": round(stat.get("Runs", 0) / stat.get("Matches", 1), 1),
+                                    "Dismissed": stat.get("T_Wicket", 0),
+                                    "Fours": sum(stat.get("four_list", [])),
+                                    "Sixes": sum(stat.get("Six_list", [])),
+                                })
+                        if batting_rows:
+                            df_bat = pd.DataFrame(batting_rows).sort_values("Runs", ascending=False)
+                            st.dataframe(df_bat, use_container_width=True, hide_index=True)
+                        else:
+                            st.info("No batting records found for this team's bowlers.")
+
+                        st.markdown(f"**Bowling record vs {selected_opp_team} batters**")
+                        bowling_rows = []
+                        for opp_player in opp_team_players:
+                            stat = stat_vs_batter(short_name, opp_player)
+                            if stat.get("Matches", 0) > 0:
+                                balls = stat.get("Balls", 0)
+                                econ = (stat.get("Runs", 0) / balls * 6) if balls else 0
+                                bowling_rows.append({
+                                    "Batter": opp_player,
+                                    "Matches": stat.get("Matches", 0),
+                                    "Runs Conceded": stat.get("Runs", 0),
+                                    "Balls": balls,
+                                    "Economy": round(econ, 2),
+                                    "Wickets": stat.get("T_Wicket", 0),
+                                    "Avg/Wkts": round(stat.get("T_Wicket", 0) / stat.get("Matches", 1), 2),
+                                    "Success": f"{(stat.get('T_Wicket', 0) / stat.get('Matches', 1) * 100):.1f}%",
+                                })
+                        if bowling_rows:
+                            df_bowl = pd.DataFrame(bowling_rows).sort_values("Wickets", ascending=False)
+                            st.dataframe(df_bowl, use_container_width=True, hide_index=True)
+                        else:
+                            st.info("No bowling records found for this team's batters.")
+                    else:
+                        st.info(f"No player list available for {selected_opp_team}.")
+            else:
+                st.info("No team statistics available.")
+
         # ── vs Specific Bowlers ──────────────────────────────────────
         with tab_vs_bowlers:
             bowlers_list = [playerNames.get(p, p) for p in player_info.get("op_Bowler", {}).keys()]
@@ -867,8 +937,8 @@ if page == "🏟️  All Player Stats":
                         ("BALLS",      bs.get("Balls", 0),                                          "#FBBF24"),
                         ("STRIKE RT",  f"{bs.get('Strike_rate', 0):.1f}",                           "#34D399"),
                         ("DISMISSED",  bs.get("T_Wicket", 0),                                       "#60A5FA"),
-                        ("FOURS",      bs.get("fours", 0),                                          "#A78BFA"),
-                        ("SIXES",      bs.get("sixes", 0),                                          "#FA908B"),
+                        ("FOURS",      sum(bs.get("four_list", [])),                                          "#A78BFA"),
+                        ("SIXES",      sum(bs.get("Six_list", [])),                                          "#FA908B"),
                     ]):
                         c.markdown(f'<div class="stat-card"><div class="stat-val" style="color:{col}">{val}</div><div class="stat-lbl">{lbl}</div></div>', unsafe_allow_html=True)
 
@@ -888,10 +958,10 @@ if page == "🏟️  All Player Stats":
                         st.markdown("**Dismissal Analysis**")
                         st.markdown(f"- Times Dismissed: **{wkts_v}**")
                         st.markdown(f"- Dismissal Rate: **{(wkts_v / mtchs * 100) if mtchs else 0:.1f}%**")
-                        st.markdown(f"- Fours: **{bs.get('fours', 0)}**")
-                        st.markdown(f"- Sixes: **{bs.get('sixes', 0)}**")
+                        st.markdown(f"- Fours: **{ sum(bs.get('four_list', [])) }**")
+                        st.markdown(f"- Sixes: **{ sum(bs.get('Six_list', [])) }**")
 
-                    run_list = bs.get("Runs_list", [])
+                    run_list = bs.get("Runs_list", []) 
                     w_list   = bs.get("W_list", []) or [0] * len(run_list)
                     if run_list:
                         st.plotly_chart(
